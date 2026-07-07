@@ -775,7 +775,7 @@ textarea {
 }
 
 .hidden-field {
-  display: none;
+  display: none !important;
 }
 
 .age-gate,

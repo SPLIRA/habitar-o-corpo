@@ -515,6 +515,11 @@ window.clearHabitarAgeVerification = function clearHabitarAgeVerification() {
   applyAgeGateState();
 };
 
+window.resetAgeGate = function resetAgeGate() {
+  localStorage.removeItem(AGE_VERIFICATION_KEY);
+  location.reload();
+};
+
 function parseRoute() {
   const hash = location.hash.replace("#", "") || "home";
   const [route, id] = hash.split("/");
