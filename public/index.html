@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1F3A33" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Joelma Souza" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta
+      name="description"
+      content="Habitar o Corpo, aplicativo de serviços, agendamento e área VIP de Joelma Souza."
+    />
+    <title>Habitar o Corpo | Joelma Souza</title>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/icons/favicon.png" type="image/png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Allura&family=Cormorant+Garamond:wght@600;700&family=Montserrat:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-frame">
+      <header class="app-header">
+        <a class="brand" href="#home" aria-label="Ir para início">
+          <span class="brand-mark">JS</span>
+          <span>
+            <strong>Habitar o Corpo</strong>
+            <small>Joelma Souza — Terapeuta Integrativa</small>
+          </span>
+        </a>
+        <nav class="desktop-nav" aria-label="Navegação principal">
+          <a href="#home">Início</a>
+          <a href="#servicos">Serviços</a>
+          <a href="#agendar">Agendar</a>
+          <a href="#minha-conta">Minha Conta</a>
+          <a href="#vip-login">VIP</a>
+          <a href="#admin-login">Admin</a>
+        </nav>
+        <a class="whatsapp-button" href="https://wa.me/5512988830247?text=Ol%C3%A1%2C%20Joelma!%20Gostaria%20de%20agendar%20um%20atendimento." target="_blank" rel="noreferrer">
+          WhatsApp
+        </a>
+      </header>
+
+      <main id="app" tabindex="-1"></main>
+      <a
+        class="floating-whatsapp"
+        href="https://wa.me/5512988830247?text=Ol%C3%A1%2C%20Joelma!%20Gostaria%20de%20agendar%20um%20atendimento."
+        target="_blank"
+        rel="noreferrer"
+        aria-label="Falar com Joelma no WhatsApp"
+      >
+        WhatsApp
+      </a>
+
+      <nav class="bottom-nav" aria-label="Navegação inferior">
+        <a href="#home" data-nav="home">Início</a>
+        <a href="#servicos" data-nav="servicos">Serviços</a>
+        <a href="#agendar" data-nav="agendar">Agendar</a>
+        <a href="#minha-conta" data-nav="minha-conta">Conta</a>
+        <a href="#vip-login" data-nav="vip-login">VIP</a>
+      </nav>
+    </div>
+    <div class="splash-screen" id="splashScreen" aria-hidden="true">
+      <div class="splash-mark">JS</div>
+      <p>Habitar o corpo é voltar para si.</p>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
