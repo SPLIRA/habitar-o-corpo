@@ -522,8 +522,16 @@ window.resetAgeGate = function resetAgeGate() {
 
 function parseRoute() {
   const hash = location.hash.replace("#", "") || "home";
-  const [route, id] = hash.split("/");
+  const parts = hash.split("/");
+  const [route, id] = parts;
   state.route = route;
+  if (route === "recuperar-senha") {
+    state.params = {
+      status: id || "",
+      email: parts[2] || "",
+    };
+    return;
+  }
   state.params = id ? { id } : {};
 }
 
@@ -741,12 +749,58 @@ function renderClientLogin() {
         <h1>Entrar</h1>
         <label>E-mail <input name="email" type="email" required placeholder="seuemail@exemplo.com" /></label>
         <label>Senha <input name="password" type="password" required placeholder="Sua senha" /></label>
+        <button class="text-link-btn" type="button" data-route="recuperar-senha">Esqueci minha senha</button>
         <button class="gold-btn" type="submit">Entrar</button>
         <button class="ghost-btn" type="button" data-route="criar-conta">Criar conta</button>
         <p class="form-message" id="clientLoginMessage"></p>
       </form>
     </section>
   `;
+}
+
+function renderPasswordRecovery() {
+  const email = state.params.email ? decodeURIComponent(state.params.email) : "";
+  const status = state.params.status || "";
+  return `
+    <section class="auth-layout">
+      <div class="form-shell auth-card">
+        <p class="eyebrow">Recuperação de acesso</p>
+        <h1>Recuperar senha</h1>
+        <p>Informe o e-mail cadastrado para solicitar a recuperação de acesso.</p>
+        <form id="passwordRecoveryForm" class="mini-form">
+          <label>E-mail
+            <input name="email" type="email" required placeholder="seuemail@exemplo.com" value="${escapeHtml(email)}" />
+          </label>
+          <button class="gold-btn" type="submit">Verificar cadastro</button>
+        </form>
+        ${renderRecoveryResult(status, email)}
+      </div>
+    </section>
+  `;
+}
+
+function renderRecoveryResult(status, email) {
+  if (status === "found") {
+    const message = `Olá, Joelma. Esqueci minha senha do app Habitar o Corpo. Meu e-mail cadastrado é: ${email}. Pode me ajudar a recuperar o acesso?`;
+    return `
+      <div class="recovery-result success">
+        <p>Encontramos seu cadastro. Para sua segurança, solicite a redefinição da senha pelo WhatsApp.</p>
+        <a class="gold-btn link-btn" href="${waLink(message)}" target="_blank" rel="noreferrer">Solicitar nova senha pelo WhatsApp</a>
+      </div>
+    `;
+  }
+  if (status === "missing") {
+    return `
+      <div class="recovery-result">
+        <p>Não encontramos cadastro com este e-mail. Verifique o endereço digitado ou crie uma nova conta.</p>
+        <div class="button-row">
+          <button class="ghost-btn" data-route="recuperar-senha" type="button">Tentar novamente</button>
+          <button class="gold-btn" data-route="criar-conta" type="button">Criar conta</button>
+        </div>
+      </div>
+    `;
+  }
+  return "";
 }
 
 function renderClientSignup() {
@@ -854,6 +908,7 @@ function renderVipLogin() {
         <p>${VIP_NOTICE}</p>
         <label>E-mail ou telefone <input name="login" required placeholder="cliente@vip.com" /></label>
         <label>Senha ou código VIP <input name="password" type="password" required placeholder="JOELMAVIP" /></label>
+        <button class="text-link-btn" type="button" data-route="recuperar-senha">Esqueci minha senha</button>
         <button class="gold-btn" type="submit">Acessar conteúdo</button>
         <button class="ghost-btn" type="button" data-route="minha-conta">Entrar pela Minha Conta</button>
         <p class="form-message" id="vipMessage"></p>
@@ -1035,6 +1090,7 @@ function adminClients(clients) {
   return `
     <section class="admin-card wide">
       <h2>Clientes</h2>
+      <p class="admin-warning">Esta é uma recuperação provisória. Em produção, use autenticação segura com backend.</p>
       <div class="client-grid">
         ${clients.length ? clients.map((client) => `
           <article class="client-card">
@@ -1045,6 +1101,7 @@ function adminClients(clients) {
             <small>${client.isVip ? "VIP ativo" : "VIP não liberado"}</small>
             <div class="admin-actions">
               <button class="ghost-btn" data-edit-client="${client.id}">Editar</button>
+              <button class="ghost-btn" data-reset-client-password="${client.id}">Redefinir senha</button>
               <button class="ghost-btn" data-toggle-client-vip="${client.id}">${client.isVip ? "Desativar VIP" : "Ativar VIP"}</button>
               <button class="danger-btn" data-delete-client="${client.id}">Excluir</button>
             </div>
@@ -1172,7 +1229,7 @@ function render() {
   if (state.route === "vip-conteudo" && !state.vipUser && !state.client?.isVip) state.route = "vip-login";
   if (state.route === "admin" && !state.admin) state.route = "admin-login";
   document.querySelectorAll("[data-nav]").forEach((link) => {
-    const accountRoutes = ["minha-conta", "entrar", "criar-conta"];
+    const accountRoutes = ["minha-conta", "entrar", "criar-conta", "recuperar-senha"];
     const isAccount = link.dataset.nav === "minha-conta" && accountRoutes.includes(state.route);
     link.classList.toggle("active", link.dataset.nav === state.route || isAccount);
   });
@@ -1185,6 +1242,7 @@ function render() {
     "minha-conta": renderAccount,
     entrar: renderClientLogin,
     "criar-conta": renderClientSignup,
+    "recuperar-senha": renderPasswordRecovery,
     "vip-login": renderVipLogin,
     "vip-conteudo": renderVipContent,
     "admin-login": renderAdminLogin,
@@ -1221,6 +1279,7 @@ function bindEvents() {
   document.querySelector("#vipLoginForm")?.addEventListener("submit", submitVipLogin);
   document.querySelector("#clientLoginForm")?.addEventListener("submit", submitClientLogin);
   document.querySelector("#clientSignupForm")?.addEventListener("submit", submitClientSignup);
+  document.querySelector("#passwordRecoveryForm")?.addEventListener("submit", submitPasswordRecovery);
   document.querySelector("#clientProfileForm")?.addEventListener("submit", updateClientProfile);
   document.querySelector("#clientLogout")?.addEventListener("click", () => {
     clearClientSession();
@@ -1253,6 +1312,7 @@ function bindEvents() {
   document.querySelectorAll("[data-delete-service]").forEach((button) => button.addEventListener("click", deleteService));
   document.querySelectorAll("[data-edit-service]").forEach((button) => button.addEventListener("click", editService));
   document.querySelectorAll("[data-edit-client]").forEach((button) => button.addEventListener("click", editClient));
+  document.querySelectorAll("[data-reset-client-password]").forEach((button) => button.addEventListener("click", resetClientPassword));
   document.querySelectorAll("[data-toggle-client-vip]").forEach((button) => button.addEventListener("click", toggleClientVip));
   document.querySelectorAll("[data-delete-client]").forEach((button) => button.addEventListener("click", deleteClient));
   document.querySelectorAll("[data-toggle-vip]").forEach((button) => button.addEventListener("click", toggleVipUser));
@@ -1384,6 +1444,14 @@ function submitClientSignup(event) {
   setRoute("minha-conta");
 }
 
+function submitPasswordRecovery(event) {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+  const email = normalizeEmail(data.email);
+  const exists = getClients().some((client) => normalizeEmail(client.email) === email);
+  setRoute("recuperar-senha", { id: `${exists ? "found" : "missing"}/${encodeURIComponent(email)}` });
+}
+
 function updateClientProfile(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.currentTarget).entries());
@@ -1509,6 +1577,26 @@ function editClient(event) {
     saveClientSession(updatedClients.find((item) => item.id === clientId));
   }
   render();
+}
+
+function resetClientPassword(event) {
+  const clientId = event.currentTarget.dataset.resetClientPassword;
+  const client = getClients().find((item) => item.id === clientId);
+  if (!client) return;
+
+  const password = prompt(`Digite a nova senha provisória para ${client.name}`);
+  if (!password) return;
+  const confirmation = prompt("Confirme a nova senha provisória");
+  if (password !== confirmation) {
+    alert("As senhas não conferem.");
+    return;
+  }
+
+  store.write(
+    "clients",
+    getClients().map((item) => (item.id === clientId ? { ...item, password } : item)),
+  );
+  alert("Senha redefinida com sucesso.");
 }
 
 function toggleClientVip(event) {

@@ -89,6 +89,8 @@ Bucket sugerido: `vip-contents`
 - Cliente autenticado pode ler seus próprios agendamentos.
 - Admin pode ler, editar e excluir agendamentos.
 - Admin pode editar clientes, ativar/desativar VIP e remover acesso.
+- Recuperação de senha atual é provisória por WhatsApp/admin manual.
+- Em produção, migrar recuperação para Supabase Auth com fluxo seguro de reset por e-mail.
 - Admin pode criar serviços, conteúdos VIP e usuários VIP.
 - Conteúdo VIP só deve ser exibido para usuário autorizado.
 - Bloqueio de horário deve ser validado no backend antes de confirmar o agendamento.
