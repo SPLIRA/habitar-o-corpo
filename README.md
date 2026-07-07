@@ -102,3 +102,4 @@ Não altere registros de e-mail do domínio, como MX, SPF, DKIM ou DMARC.
 - Migrar Minha Conta para Supabase Auth.
 - Criar bucket privado para conteúdos VIP.
 - Validar conflito de horários no backend.
+
