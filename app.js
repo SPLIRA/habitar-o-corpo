@@ -237,6 +237,7 @@ const state = {
   params: {},
   selectedServiceId: "",
   bookingDraft: null,
+  recoveryResult: null,
   vipUser: null,
   client: null,
   admin: null,
@@ -515,6 +516,9 @@ function waLink(message) {
 }
 
 function setRoute(route, params = {}) {
+  if (route === "recuperar-senha" && state.route !== "recuperar-senha") {
+    state.recoveryResult = null;
+  }
   state.route = route;
   state.params = params;
   location.hash = params.id ? `${route}/${params.id}` : route;
@@ -567,13 +571,6 @@ function parseRoute() {
   const parts = hash.split("/");
   const [route, id] = parts;
   state.route = route;
-  if (route === "recuperar-senha") {
-    state.params = {
-      status: id || "",
-      email: parts[2] || "",
-    };
-    return;
-  }
   state.params = id ? { id } : {};
 }
 
@@ -801,8 +798,7 @@ function renderClientLogin() {
 }
 
 function renderPasswordRecovery() {
-  const email = state.params.email ? decodeURIComponent(state.params.email) : "";
-  const status = state.params.status || "";
+  const email = state.recoveryResult?.email || "";
   return `
     <section class="auth-layout">
       <div class="form-shell auth-card">
@@ -815,23 +811,24 @@ function renderPasswordRecovery() {
           </label>
           <button class="gold-btn" type="submit">Verificar cadastro</button>
         </form>
-        ${renderRecoveryResult(status, email)}
+        <div id="passwordRecoveryResult">${renderRecoveryResult(state.recoveryResult)}</div>
       </div>
     </section>
   `;
 }
 
-function renderRecoveryResult(status, email) {
-  if (status === "found") {
-    const message = `Olá, Joelma. Esqueci minha senha do app Habitar o Corpo. Meu e-mail cadastrado é: ${email}. Pode me ajudar a recuperar o acesso?`;
+function renderRecoveryResult(result) {
+  if (!result) return "";
+  if (result.status === "found") {
+    const message = `Olá, Joelma. Esqueci minha senha do app Habitar o Corpo. Meu e-mail cadastrado é: ${result.email}`;
     return `
       <div class="recovery-result success">
-        <p>Encontramos seu cadastro. Para sua segurança, solicite a redefinição da senha pelo WhatsApp.</p>
+        <p>Encontramos seu cadastro. Para sua segurança, solicite a redefinição de senha pelo WhatsApp.</p>
         <a class="gold-btn link-btn" href="${waLink(message)}" target="_blank" rel="noreferrer">Solicitar nova senha pelo WhatsApp</a>
       </div>
     `;
   }
-  if (status === "missing") {
+  if (result.status === "missing") {
     return `
       <div class="recovery-result">
         <p>Não encontramos cadastro com este e-mail. Verifique o endereço digitado ou crie uma nova conta.</p>
@@ -1516,9 +1513,25 @@ function submitClientSignup(event) {
 function submitPasswordRecovery(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.currentTarget).entries());
-  const email = normalizeEmail(data.email);
-  const exists = getClients().some((client) => normalizeEmail(client.email) === email);
-  setRoute("recuperar-senha", { id: `${exists ? "found" : "missing"}/${encodeURIComponent(email)}` });
+  const normalizedEmail = normalizeEmail(data.email);
+  const clients = getClients();
+  const foundClient = clients.find((client) => normalizeEmail(client.email) === normalizedEmail);
+
+  // Debug temporário:
+  // console.log("Clientes carregados:", clients);
+  // console.log("E-mail pesquisado:", normalizedEmail);
+  // console.log("Cliente encontrado:", foundClient || null);
+
+  state.recoveryResult = {
+    status: foundClient ? "found" : "missing",
+    email: normalizedEmail,
+  };
+
+  const resultContainer = document.querySelector("#passwordRecoveryResult");
+  if (resultContainer) {
+    resultContainer.innerHTML = renderRecoveryResult(state.recoveryResult);
+    bindEvents();
+  }
 }
 
 function updateClientProfile(event) {
