@@ -70,6 +70,26 @@
       <div class="splash-mark">JS</div>
       <p>Habitar o corpo é voltar para si.</p>
     </div>
+    <section class="age-gate" id="ageGate" aria-modal="true" role="dialog" aria-labelledby="ageGateTitle">
+      <div class="age-gate-card">
+        <div class="age-gate-mark">JS</div>
+        <p class="eyebrow">Confirmação de idade</p>
+        <h1 id="ageGateTitle">Este aplicativo contém conteúdos e serviços voltados ao público adulto.</h1>
+        <p>Para continuar, confirme que você tem 18 anos ou mais.</p>
+        <small>Ao continuar, você declara ser maior de idade e concorda em acessar conteúdos voltados ao público adulto.</small>
+        <div class="age-gate-actions">
+          <button class="gold-btn" type="button" id="confirmAge">Sim, tenho 18 anos ou mais</button>
+          <button class="ghost-btn" type="button" id="denyAge">Não tenho 18 anos</button>
+        </div>
+      </div>
+    </section>
+    <section class="age-denied hidden-field" id="ageDenied" aria-live="polite">
+      <div class="age-gate-card">
+        <div class="age-gate-mark">JS</div>
+        <h1>Este conteúdo é destinado apenas a maiores de 18 anos.</h1>
+        <button class="gold-btn" type="button" id="leaveApp">Sair</button>
+      </div>
+    </section>
 
     <script src="/app.js"></script>
   </body>

@@ -15,6 +15,7 @@ const APP_CONFIG = {
   domain: "app.joelmasouzaoficial.com.br",
 };
 
+const AGE_VERIFICATION_KEY = "habitar_age_verified";
 const WHATSAPP_NUMBER = APP_CONFIG.whatsapp;
 const VIP_NOTICE = "Conteúdo privado, autorizado apenas para uso pessoal da cliente cadastrada.";
 const businessHours = [
@@ -241,6 +242,7 @@ const state = {
 };
 
 const app = document.querySelector("#app");
+const appFrame = document.querySelector(".app-frame");
 
 const store = {
   read(key, fallback) {
@@ -476,6 +478,42 @@ function setRoute(route, params = {}) {
   location.hash = params.id ? `${route}/${params.id}` : route;
   render();
 }
+
+function isAgeVerified() {
+  return localStorage.getItem(AGE_VERIFICATION_KEY) === "true";
+}
+
+function applyAgeGateState() {
+  const ageGate = document.querySelector("#ageGate");
+  const ageDenied = document.querySelector("#ageDenied");
+  const verified = isAgeVerified();
+
+  ageGate?.classList.toggle("hidden-field", verified);
+  ageDenied?.classList.add("hidden-field");
+  appFrame?.classList.toggle("age-locked", !verified);
+  document.body.classList.toggle("age-gate-open", !verified);
+}
+
+function bindAgeGate() {
+  document.querySelector("#confirmAge")?.addEventListener("click", () => {
+    localStorage.setItem(AGE_VERIFICATION_KEY, "true");
+    applyAgeGateState();
+  });
+  document.querySelector("#denyAge")?.addEventListener("click", () => {
+    document.querySelector("#ageGate")?.classList.add("hidden-field");
+    document.querySelector("#ageDenied")?.classList.remove("hidden-field");
+    appFrame?.classList.add("age-locked");
+    document.body.classList.add("age-gate-open");
+  });
+  document.querySelector("#leaveApp")?.addEventListener("click", () => {
+    window.location.href = "https://www.google.com";
+  });
+}
+
+window.clearHabitarAgeVerification = function clearHabitarAgeVerification() {
+  localStorage.removeItem(AGE_VERIFICATION_KEY);
+  applyAgeGateState();
+};
 
 function parseRoute() {
   const hash = location.hash.replace("#", "") || "home";
@@ -1643,6 +1681,8 @@ if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/service-worker.js").catch(() => {});
 }
 render();
+bindAgeGate();
+applyAgeGateState();
 
 window.addEventListener("load", () => {
   window.setTimeout(() => {
