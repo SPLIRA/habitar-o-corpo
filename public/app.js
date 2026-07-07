@@ -16,6 +16,7 @@ const APP_CONFIG = {
 };
 
 const AGE_VERIFICATION_KEY = "habitar_age_verified";
+const CLIENTS_STORAGE_KEY = "clients";
 const WHATSAPP_NUMBER = APP_CONFIG.whatsapp;
 const VIP_NOTICE = "Conteúdo privado, autorizado apenas para uso pessoal da cliente cadastrada.";
 const businessHours = [
@@ -256,17 +257,13 @@ const store = {
 
 function seedData() {
   const dataVersion = "habitar-o-corpo-v3";
-  if (localStorage.getItem("dataVersion") !== dataVersion) {
-    resetDemoData();
-    localStorage.setItem("dataVersion", dataVersion);
-    return;
-  }
   if (!localStorage.getItem("services")) store.write("services", initialServices);
   if (!localStorage.getItem("appointments")) store.write("appointments", initialAppointments);
   if (!localStorage.getItem("vipContents")) store.write("vipContents", initialVipContents);
   if (!localStorage.getItem("vipUsers")) store.write("vipUsers", initialVipUsers);
-  if (!localStorage.getItem("clients")) store.write("clients", initialClients);
   if (!localStorage.getItem("admins")) store.write("admins", initialAdmins);
+  migrateClients();
+  localStorage.setItem("dataVersion", dataVersion);
   state.client = getClientSession();
 }
 
@@ -275,7 +272,7 @@ function resetDemoData() {
   store.write("appointments", initialAppointments);
   store.write("vipContents", initialVipContents);
   store.write("vipUsers", initialVipUsers);
-  store.write("clients", initialClients);
+  saveClients(initialClients);
   store.write("admins", initialAdmins);
   localStorage.removeItem("clientSession");
   state.client = null;
@@ -299,7 +296,52 @@ function getVipUsers() {
 }
 
 function getClients() {
-  return store.read("clients", []);
+  return store.read(CLIENTS_STORAGE_KEY, []);
+}
+
+function saveClients(clients) {
+  store.write(CLIENTS_STORAGE_KEY, clients);
+}
+
+function mergeClientsByEmail(...clientGroups) {
+  const merged = new Map();
+  clientGroups.flat().filter(Boolean).forEach((client) => {
+    const email = normalizeEmail(client.email || client.login);
+    if (!email) return;
+    const existing = merged.get(email) || {};
+    merged.set(email, {
+      ...existing,
+      ...client,
+      id: existing.id || client.id || crypto.randomUUID(),
+      email,
+      role: "client",
+      isVip: client.isVip !== undefined ? Boolean(client.isVip) : Boolean(existing.isVip || client.active),
+      active: client.active !== undefined ? client.active !== false : existing.active !== false,
+      createdAt: existing.createdAt || client.createdAt || new Date().toISOString(),
+      updatedAt: client.updatedAt || existing.updatedAt || new Date().toISOString(),
+    });
+  });
+  return [...merged.values()];
+}
+
+function migrateClients() {
+  const currentClients = store.read(CLIENTS_STORAGE_KEY, []);
+  const legacyVipUsers = getVipUsers()
+    .filter((user) => user.login && user.login.includes("@"))
+    .map((user) => ({
+      id: user.id,
+      name: user.name,
+      phone: user.phone || "",
+      email: user.login,
+      city: user.city || "",
+      password: user.password || APP_CONFIG.vipCode,
+      role: "client",
+      isVip: Boolean(user.active),
+      active: user.active !== false,
+      createdAt: user.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }));
+  saveClients(mergeClientsByEmail(initialClients, legacyVipUsers, currentClients));
 }
 
 function getAdmins() {
@@ -1041,7 +1083,6 @@ function renderAdmin() {
         ${adminAppointments()}
         ${adminClients(clients)}
         ${adminServices()}
-        ${adminVipUsers()}
         ${adminVipContents()}
         ${adminSettings()}
       </div>
@@ -1090,7 +1131,27 @@ function adminClients(clients) {
   return `
     <section class="admin-card wide">
       <h2>Clientes</h2>
+      <strong class="admin-counter">Clientes cadastrados: ${clients.length}</strong>
       <p class="admin-warning">Esta é uma recuperação provisória. Em produção, use autenticação segura com backend.</p>
+      <form id="adminClientForm" class="mini-form">
+        <div class="form-row">
+          <input name="name" placeholder="Nome completo" required />
+          <input name="phone" placeholder="Telefone / WhatsApp" required />
+        </div>
+        <div class="form-row">
+          <input name="email" type="email" placeholder="E-mail" required />
+          <input name="city" placeholder="Cidade" />
+        </div>
+        <div class="form-row">
+          <input name="password" type="password" placeholder="Senha provisória" required />
+          <select name="isVip">
+            <option value="false">Cliente comum</option>
+            <option value="true">Cliente VIP</option>
+          </select>
+        </div>
+        <button class="gold-btn" type="submit">Criar cliente</button>
+        <p class="form-message" id="adminClientMessage"></p>
+      </form>
       <div class="client-grid">
         ${clients.length ? clients.map((client) => `
           <article class="client-card">
@@ -1301,6 +1362,7 @@ function bindEvents() {
 
   document.querySelectorAll("[data-status]").forEach((select) => select.addEventListener("change", updateAppointmentStatus));
   document.querySelector("#serviceForm")?.addEventListener("submit", createService);
+  document.querySelector("#adminClientForm")?.addEventListener("submit", createAdminClient);
   document.querySelector("#vipUserForm")?.addEventListener("submit", createVipUser);
   const contentForm = document.querySelector("#contentForm");
   if (contentForm) {
@@ -1366,12 +1428,18 @@ function submitVipLogin(event) {
     setRoute("vip-conteudo");
     return;
   }
-  const user = getVipUsers().find((item) => item.active && item.login === data.login && item.password === data.password);
-  if (!user) {
+  const client = getClients().find(
+    (item) =>
+      item.active !== false &&
+      item.isVip &&
+      (normalizeEmail(item.email) === normalizeEmail(data.login) || normalizePhone(item.phone || "") === normalizePhone(data.login || "")) &&
+      item.password === data.password,
+  );
+  if (!client) {
     document.querySelector("#vipMessage").textContent = "Acesso não autorizado.";
     return;
   }
-  state.vipUser = user;
+  state.vipUser = { id: client.id, name: client.name, login: client.email, active: true };
   setRoute("vip-conteudo");
 }
 
@@ -1438,8 +1506,9 @@ function submitClientSignup(event) {
     acceptedTerms: true,
     active: true,
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
-  store.write("clients", [client, ...getClients()]);
+  saveClients([client, ...getClients()]);
   saveClientSession(client);
   setRoute("minha-conta");
 }
@@ -1470,10 +1539,10 @@ function updateClientProfile(event) {
 
   const clients = getClients().map((client) =>
     client.id === state.client.id
-      ? { ...client, name: data.name.trim(), phone: data.phone.trim(), email, city: data.city.trim() }
+      ? { ...client, name: data.name.trim(), phone: data.phone.trim(), email, city: data.city.trim(), updatedAt: new Date().toISOString() }
       : client,
   );
-  store.write("clients", clients);
+  saveClients(clients);
   saveClientSession(clients.find((client) => client.id === state.client.id));
   message.textContent = "Dados atualizados com sucesso.";
 }
@@ -1572,10 +1641,45 @@ function editClient(event) {
   const updatedClients = clients.map((item) =>
     item.id === clientId ? { ...item, name: name.trim(), phone: phone.trim(), email, city: city.trim() } : item,
   );
-  store.write("clients", updatedClients);
+  saveClients(updatedClients);
   if (state.client?.id === clientId) {
     saveClientSession(updatedClients.find((item) => item.id === clientId));
   }
+  render();
+}
+
+function createAdminClient(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form).entries());
+  const message = document.querySelector("#adminClientMessage");
+  const email = normalizeEmail(data.email);
+
+  if (!data.name.trim() || !data.phone.trim() || !email || !isValidEmail(email) || !data.password) {
+    message.textContent = "Preencha nome, telefone, e-mail válido e senha.";
+    return;
+  }
+  if (getClients().some((client) => normalizeEmail(client.email) === email)) {
+    message.textContent = "Já existe uma cliente com este e-mail.";
+    return;
+  }
+
+  const client = {
+    id: crypto.randomUUID(),
+    name: data.name.trim(),
+    phone: data.phone.trim(),
+    email,
+    city: data.city.trim(),
+    password: data.password,
+    role: "client",
+    isVip: data.isVip === "true",
+    acceptedTerms: false,
+    active: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  saveClients([client, ...getClients()]);
+  form.reset();
   render();
 }
 
@@ -1592,17 +1696,16 @@ function resetClientPassword(event) {
     return;
   }
 
-  store.write(
-    "clients",
-    getClients().map((item) => (item.id === clientId ? { ...item, password } : item)),
-  );
+  saveClients(getClients().map((item) => (item.id === clientId ? { ...item, password, updatedAt: new Date().toISOString() } : item)));
   alert("Senha redefinida com sucesso.");
 }
 
 function toggleClientVip(event) {
   const clientId = event.currentTarget.dataset.toggleClientVip;
-  const clients = getClients().map((client) => (client.id === clientId ? { ...client, isVip: !client.isVip } : client));
-  store.write("clients", clients);
+  const clients = getClients().map((client) =>
+    client.id === clientId ? { ...client, isVip: !client.isVip, updatedAt: new Date().toISOString() } : client,
+  );
+  saveClients(clients);
   if (state.client?.id === clientId) {
     saveClientSession(clients.find((client) => client.id === clientId));
   }
@@ -1615,7 +1718,7 @@ function deleteClient(event) {
   if (!client) return;
   if (!confirm(`Excluir a cliente ${client.name}? Esta ação não remove agendamentos já criados.`)) return;
 
-  store.write("clients", getClients().filter((item) => item.id !== clientId));
+  saveClients(getClients().filter((item) => item.id !== clientId));
   if (state.client?.id === clientId) clearClientSession();
   render();
 }

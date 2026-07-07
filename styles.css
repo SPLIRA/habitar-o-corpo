@@ -546,6 +546,15 @@ textarea {
   background: rgba(85, 107, 79, 0.12);
 }
 
+.admin-counter {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: var(--deep);
+  background: rgba(201, 163, 78, 0.2);
+}
+
 .account-note,
 .account-callout {
   max-width: 760px;
