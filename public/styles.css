@@ -555,6 +555,25 @@ textarea {
   background: rgba(201, 163, 78, 0.2);
 }
 
+.client-diagnostics {
+  display: grid;
+  gap: 6px;
+  border: 1px dashed rgba(85, 107, 79, 0.38);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--muted);
+  background: rgba(247, 242, 234, 0.62);
+}
+
+.client-diagnostics strong {
+  color: var(--coffee);
+}
+
+.client-diagnostics span,
+.client-diagnostics small {
+  overflow-wrap: anywhere;
+}
+
 .account-note,
 .account-callout {
   max-width: 760px;

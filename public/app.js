@@ -16,7 +16,16 @@ const APP_CONFIG = {
 };
 
 const AGE_VERIFICATION_KEY = "habitar_age_verified";
-const CLIENTS_STORAGE_KEY = "clients";
+const CLIENTS_STORAGE_KEY = "habitar_clients";
+const LEGACY_CLIENT_KEYS = [
+  "clients",
+  "customers",
+  "users",
+  "registeredUsers",
+  "mockClients",
+  "habitar_users",
+  "habitar_customers",
+];
 const WHATSAPP_NUMBER = APP_CONFIG.whatsapp;
 const VIP_NOTICE = "Conteúdo privado, autorizado apenas para uso pessoal da cliente cadastrada.";
 const businessHours = [
@@ -222,10 +231,6 @@ const initialVipContents = [
   },
 ];
 
-const initialVipUsers = [
-  { id: "vip-demo", name: "Cliente VIP", login: "cliente@vip.com", password: APP_CONFIG.vipCode, active: true },
-];
-
 const initialAdmins = [
   { id: "admin-demo", name: "Joelma Souza", email: APP_CONFIG.adminEmail, password: APP_CONFIG.adminPassword },
 ];
@@ -261,7 +266,6 @@ function seedData() {
   if (!localStorage.getItem("services")) store.write("services", initialServices);
   if (!localStorage.getItem("appointments")) store.write("appointments", initialAppointments);
   if (!localStorage.getItem("vipContents")) store.write("vipContents", initialVipContents);
-  if (!localStorage.getItem("vipUsers")) store.write("vipUsers", initialVipUsers);
   if (!localStorage.getItem("admins")) store.write("admins", initialAdmins);
   migrateClients();
   localStorage.setItem("dataVersion", dataVersion);
@@ -272,8 +276,9 @@ function resetDemoData() {
   store.write("services", initialServices);
   store.write("appointments", initialAppointments);
   store.write("vipContents", initialVipContents);
-  store.write("vipUsers", initialVipUsers);
   saveClients(initialClients);
+  localStorage.removeItem("vipUsers");
+  LEGACY_CLIENT_KEYS.forEach((key) => localStorage.removeItem(key));
   store.write("admins", initialAdmins);
   localStorage.removeItem("clientSession");
   state.client = null;
@@ -292,16 +297,44 @@ function getVipContents() {
   return store.read("vipContents", []);
 }
 
-function getVipUsers() {
-  return store.read("vipUsers", []);
-}
-
 function getClients() {
   return store.read(CLIENTS_STORAGE_KEY, []);
 }
 
 function saveClients(clients) {
   store.write(CLIENTS_STORAGE_KEY, clients);
+}
+
+function findClientByEmail(email) {
+  const normalizedEmail = normalizeEmail(email);
+  return getClients().find((client) => normalizeEmail(client.email) === normalizedEmail) || null;
+}
+
+function upsertClient(client) {
+  const normalizedEmail = normalizeEmail(client.email);
+  const clients = getClients();
+  const existing = clients.find((item) => item.id === client.id || normalizeEmail(item.email) === normalizedEmail);
+  const now = new Date().toISOString();
+  const nextClient = {
+    ...existing,
+    ...client,
+    id: existing?.id || client.id || crypto.randomUUID(),
+    email: normalizedEmail,
+    role: "client",
+    isVip: Boolean(client.isVip ?? existing?.isVip),
+    active: client.active !== false,
+    createdAt: existing?.createdAt || client.createdAt || now,
+    updatedAt: now,
+  };
+  const nextClients = existing
+    ? clients.map((item) => (item.id === existing.id ? nextClient : item))
+    : [nextClient, ...clients];
+  saveClients(nextClients);
+  return nextClient;
+}
+
+function deleteClientById(id) {
+  saveClients(getClients().filter((client) => client.id !== id));
 }
 
 function mergeClientsByEmail(...clientGroups) {
@@ -314,6 +347,10 @@ function mergeClientsByEmail(...clientGroups) {
       ...existing,
       ...client,
       id: existing.id || client.id || crypto.randomUUID(),
+      name: client.name || client.fullName || client.customerName || existing.name || "Cliente",
+      phone: client.phone || client.customerPhone || client.whatsapp || existing.phone || "",
+      city: client.city || existing.city || "",
+      password: client.password || existing.password || "",
       email,
       role: "client",
       isVip: client.isVip !== undefined ? Boolean(client.isVip) : Boolean(existing.isVip || client.active),
@@ -327,7 +364,8 @@ function mergeClientsByEmail(...clientGroups) {
 
 function migrateClients() {
   const currentClients = store.read(CLIENTS_STORAGE_KEY, []);
-  const legacyVipUsers = getVipUsers()
+  const legacyClients = LEGACY_CLIENT_KEYS.flatMap((key) => store.read(key, []));
+  const legacyVipUsers = store.read("vipUsers", [])
     .filter((user) => user.login && user.login.includes("@"))
     .map((user) => ({
       id: user.id,
@@ -342,7 +380,10 @@ function migrateClients() {
       createdAt: user.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }));
-  saveClients(mergeClientsByEmail(initialClients, legacyVipUsers, currentClients));
+  const migratedClients = mergeClientsByEmail(initialClients, legacyVipUsers, legacyClients, currentClients);
+  saveClients(migratedClients);
+  LEGACY_CLIENT_KEYS.forEach((key) => localStorage.removeItem(key));
+  localStorage.removeItem("vipUsers");
 }
 
 function getAdmins() {
@@ -1129,6 +1170,12 @@ function adminClients(clients) {
     <section class="admin-card wide">
       <h2>Clientes</h2>
       <strong class="admin-counter">Clientes cadastrados: ${clients.length}</strong>
+      <div class="client-diagnostics">
+        <strong>Diagnóstico de clientes</strong>
+        <span>Chave oficial usada: ${CLIENTS_STORAGE_KEY}</span>
+        <span>Total de clientes: ${clients.length}</span>
+        <small>${clients.map((client) => normalizeEmail(client.email)).filter(Boolean).join(", ") || "Nenhum e-mail carregado"}</small>
+      </div>
       <p class="admin-warning">Esta é uma recuperação provisória. Em produção, use autenticação segura com backend.</p>
       <form id="adminClientForm" class="mini-form">
         <div class="form-row">
@@ -1189,26 +1236,6 @@ function adminServices() {
             <button class="ghost-btn" data-edit-service="${service.id}">Editar</button>
             <button class="danger-btn" data-delete-service="${service.id}">Excluir</button>
           </div>
-        </div>
-      `).join("")}
-    </section>
-  `;
-}
-
-function adminVipUsers() {
-  return `
-    <section class="admin-card">
-      <h2>Usuários VIP</h2>
-      <form id="vipUserForm" class="mini-form">
-        <input name="name" placeholder="Nome" required />
-        <input name="login" placeholder="E-mail ou telefone" required />
-        <input name="password" placeholder="Senha" required />
-        <button class="gold-btn" type="submit">Criar VIP</button>
-      </form>
-      ${getVipUsers().map((user) => `
-        <div class="admin-item">
-          <span>${user.name} · ${user.active ? "ativo" : "bloqueado"}</span>
-          <button class="danger-btn" data-toggle-vip="${user.id}">${user.active ? "Remover acesso" : "Ativar"}</button>
         </div>
       `).join("")}
     </section>
@@ -1360,7 +1387,6 @@ function bindEvents() {
   document.querySelectorAll("[data-status]").forEach((select) => select.addEventListener("change", updateAppointmentStatus));
   document.querySelector("#serviceForm")?.addEventListener("submit", createService);
   document.querySelector("#adminClientForm")?.addEventListener("submit", createAdminClient);
-  document.querySelector("#vipUserForm")?.addEventListener("submit", createVipUser);
   const contentForm = document.querySelector("#contentForm");
   if (contentForm) {
     const syncContentFields = () => updateContentFormFields(contentForm);
@@ -1374,7 +1400,6 @@ function bindEvents() {
   document.querySelectorAll("[data-reset-client-password]").forEach((button) => button.addEventListener("click", resetClientPassword));
   document.querySelectorAll("[data-toggle-client-vip]").forEach((button) => button.addEventListener("click", toggleClientVip));
   document.querySelectorAll("[data-delete-client]").forEach((button) => button.addEventListener("click", deleteClient));
-  document.querySelectorAll("[data-toggle-vip]").forEach((button) => button.addEventListener("click", toggleVipUser));
   document.querySelectorAll("[data-open-vip]").forEach((button) => button.addEventListener("click", () => setRoute("vip-conteudo", { id: button.dataset.openVip })));
   document.querySelectorAll("[data-close-vip]").forEach((button) => button.addEventListener("click", () => setRoute("vip-conteudo")));
   document.querySelectorAll("[data-delete-content]").forEach((button) => button.addEventListener("click", deleteVipContent));
@@ -1444,10 +1469,8 @@ function submitClientLogin(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.currentTarget).entries());
   const email = normalizeEmail(data.email);
-  const client = getClients().find(
-    (item) => item.active !== false && normalizeEmail(item.email) === email && item.password === data.password,
-  );
-  if (!client) {
+  const client = findClientByEmail(email);
+  if (!client || client.active === false || client.password !== data.password) {
     document.querySelector("#clientLoginMessage").textContent = "E-mail ou senha incorretos.";
     return;
   }
@@ -1486,8 +1509,15 @@ function submitClientSignup(event) {
     message.textContent = "Aceite os Termos de Uso e a Política de Privacidade.";
     return;
   }
-  if (getClients().some((client) => normalizeEmail(client.email) === email)) {
-    message.textContent = "Já existe uma conta com este e-mail.";
+  if (findClientByEmail(email)) {
+    message.innerHTML = `
+      Este e-mail já está cadastrado. Entrar ou recuperar senha?
+      <div class="button-row inline-actions">
+        <button class="ghost-btn" type="button" data-route="entrar">Entrar</button>
+        <button class="gold-btn" type="button" data-route="recuperar-senha">Recuperar senha</button>
+      </div>
+    `;
+    bindEvents();
     return;
   }
 
@@ -1505,8 +1535,8 @@ function submitClientSignup(event) {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  saveClients([client, ...getClients()]);
-  saveClientSession(client);
+  const savedClient = upsertClient(client);
+  saveClientSession(savedClient);
   setRoute("minha-conta");
 }
 
@@ -1515,7 +1545,7 @@ function submitPasswordRecovery(event) {
   const data = Object.fromEntries(new FormData(event.currentTarget).entries());
   const normalizedEmail = normalizeEmail(data.email);
   const clients = getClients();
-  const foundClient = clients.find((client) => normalizeEmail(client.email) === normalizedEmail);
+  const foundClient = findClientByEmail(normalizedEmail);
 
   // Debug temporário:
   // console.log("Clientes carregados:", clients);
@@ -1550,13 +1580,14 @@ function updateClientProfile(event) {
     return;
   }
 
-  const clients = getClients().map((client) =>
-    client.id === state.client.id
-      ? { ...client, name: data.name.trim(), phone: data.phone.trim(), email, city: data.city.trim(), updatedAt: new Date().toISOString() }
-      : client,
-  );
-  saveClients(clients);
-  saveClientSession(clients.find((client) => client.id === state.client.id));
+  const updatedClient = upsertClient({
+    ...state.client,
+    name: data.name.trim(),
+    phone: data.phone.trim(),
+    email,
+    city: data.city.trim(),
+  });
+  saveClientSession(updatedClient);
   message.textContent = "Dados atualizados com sucesso.";
 }
 
@@ -1651,12 +1682,9 @@ function editClient(event) {
     return;
   }
 
-  const updatedClients = clients.map((item) =>
-    item.id === clientId ? { ...item, name: name.trim(), phone: phone.trim(), email, city: city.trim() } : item,
-  );
-  saveClients(updatedClients);
+  const updatedClient = upsertClient({ ...client, name: name.trim(), phone: phone.trim(), email, city: city.trim() });
   if (state.client?.id === clientId) {
-    saveClientSession(updatedClients.find((item) => item.id === clientId));
+    saveClientSession(updatedClient);
   }
   render();
 }
@@ -1672,7 +1700,7 @@ function createAdminClient(event) {
     message.textContent = "Preencha nome, telefone, e-mail válido e senha.";
     return;
   }
-  if (getClients().some((client) => normalizeEmail(client.email) === email)) {
+  if (findClientByEmail(email)) {
     message.textContent = "Já existe uma cliente com este e-mail.";
     return;
   }
@@ -1691,7 +1719,7 @@ function createAdminClient(event) {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  saveClients([client, ...getClients()]);
+  upsertClient(client);
   form.reset();
   render();
 }
@@ -1709,18 +1737,17 @@ function resetClientPassword(event) {
     return;
   }
 
-  saveClients(getClients().map((item) => (item.id === clientId ? { ...item, password, updatedAt: new Date().toISOString() } : item)));
+  upsertClient({ ...client, password });
   alert("Senha redefinida com sucesso.");
 }
 
 function toggleClientVip(event) {
   const clientId = event.currentTarget.dataset.toggleClientVip;
-  const clients = getClients().map((client) =>
-    client.id === clientId ? { ...client, isVip: !client.isVip, updatedAt: new Date().toISOString() } : client,
-  );
-  saveClients(clients);
+  const client = getClients().find((item) => item.id === clientId);
+  if (!client) return;
+  const updatedClient = upsertClient({ ...client, isVip: !client.isVip });
   if (state.client?.id === clientId) {
-    saveClientSession(clients.find((client) => client.id === clientId));
+    saveClientSession(updatedClient);
   }
   render();
 }
@@ -1731,23 +1758,8 @@ function deleteClient(event) {
   if (!client) return;
   if (!confirm(`Excluir a cliente ${client.name}? Esta ação não remove agendamentos já criados.`)) return;
 
-  saveClients(getClients().filter((item) => item.id !== clientId));
+  deleteClientById(clientId);
   if (state.client?.id === clientId) clearClientSession();
-  render();
-}
-
-function createVipUser(event) {
-  event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.currentTarget).entries());
-  store.write("vipUsers", [{ id: crypto.randomUUID(), ...data, active: true }, ...getVipUsers()]);
-  render();
-}
-
-function toggleVipUser(event) {
-  store.write(
-    "vipUsers",
-    getVipUsers().map((user) => (user.id === event.currentTarget.dataset.toggleVip ? { ...user, active: !user.active } : user)),
-  );
   render();
 }
 
