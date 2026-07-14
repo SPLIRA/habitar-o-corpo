@@ -1219,6 +1219,23 @@ function renderAdmin() {
   `;
 }
 
+function renderAdminClientsPage() {
+  const clients = getClients();
+  return `
+    <section class="admin-shell">
+      <div class="section-heading">
+        <p class="eyebrow">Painel administrativo</p>
+        <h1>Clientes</h1>
+        <div class="admin-actions">
+          <button class="ghost-btn" data-route="admin">Voltar ao dashboard</button>
+          <button class="ghost-btn" id="adminLogout">Sair</button>
+        </div>
+      </div>
+      ${adminClients(clients)}
+    </section>
+  `;
+}
+
 function uniqueClients(appointments) {
   const clients = new Map();
   appointments.forEach((appointment) => {
@@ -1405,6 +1422,11 @@ function render() {
   parseRoute();
   if (state.route === "vip-conteudo" && !state.vipUser && !state.client?.isVip) state.route = "vip-login";
   if (state.route === "admin" && !state.admin) state.route = "admin-login";
+  if (state.route === "clientes" && !state.admin) state.route = "admin-login";
+  document.body.classList.toggle("admin-logged-in", Boolean(state.admin));
+  document.querySelectorAll(".admin-only-nav").forEach((link) => {
+    link.classList.toggle("hidden-field", !state.admin);
+  });
   document.querySelectorAll("[data-nav]").forEach((link) => {
     const accountRoutes = ["minha-conta", "entrar", "criar-conta", "recuperar-senha"];
     const isAccount = link.dataset.nav === "minha-conta" && accountRoutes.includes(state.route);
@@ -1424,6 +1446,7 @@ function render() {
     "vip-conteudo": renderVipContent,
     "admin-login": renderAdminLogin,
     admin: renderAdmin,
+    clientes: renderAdminClientsPage,
   };
   app.innerHTML = (routes[state.route] || renderHome)();
   bindEvents();
