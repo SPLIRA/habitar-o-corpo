@@ -17,6 +17,9 @@ const APP_CONFIG = {
 
 const AGE_VERIFICATION_KEY = "habitar_age_verified";
 const CLIENTS_STORAGE_KEY = "habitar_clients";
+const APPOINTMENTS_STORAGE_KEY = "habitar_appointments";
+const VIP_CONTENTS_STORAGE_KEY = "habitar_vip_contents";
+const SESSION_STORAGE_KEY = "habitar_session";
 const LEGACY_CLIENT_KEYS = [
   "clients",
   "customers",
@@ -28,6 +31,7 @@ const LEGACY_CLIENT_KEYS = [
 ];
 const WHATSAPP_NUMBER = APP_CONFIG.whatsapp;
 const VIP_NOTICE = "Conteúdo privado, autorizado apenas para uso pessoal da cliente cadastrada.";
+// Autenticação local apenas para protótipo. Migrar para Supabase Auth em produção.
 const businessHours = [
   ["Terça-feira", "09:00 às 19:00"],
   ["Quarta-feira", "09:00 às 19:00"],
@@ -173,6 +177,7 @@ const initialClients = [
     acceptedTerms: true,
     active: true,
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: "client-renata",
@@ -186,6 +191,21 @@ const initialClients = [
     acceptedTerms: true,
     active: true,
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: "client-vip-demo",
+    role: "client",
+    isVip: true,
+    name: "Cliente VIP",
+    phone: "(12) 98883-0247",
+    email: "clientevip@email.com",
+    password: APP_CONFIG.vipCode,
+    city: "São José dos Campos",
+    acceptedTerms: true,
+    active: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
 ];
 
@@ -261,28 +281,96 @@ const store = {
   },
 };
 
+const localDataStore = {
+  getClients() {
+    return store.read(CLIENTS_STORAGE_KEY, []);
+  },
+  saveClients(clients) {
+    store.write(CLIENTS_STORAGE_KEY, clients);
+  },
+  findClientByEmail(email) {
+    const normalizedEmail = normalizeEmail(email);
+    return this.getClients().find((client) => normalizeEmail(client.email) === normalizedEmail) || null;
+  },
+  createClient(client) {
+    if (this.findClientByEmail(client.email)) return null;
+    return this.updateClient({
+      ...client,
+      id: client.id || crypto.randomUUID(),
+      role: "client",
+      isVip: Boolean(client.isVip),
+      active: client.active !== false,
+      createdAt: client.createdAt || new Date().toISOString(),
+    });
+  },
+  updateClient(client) {
+    const normalizedEmail = normalizeEmail(client.email);
+    const clients = this.getClients();
+    const existing = clients.find((item) => item.id === client.id || normalizeEmail(item.email) === normalizedEmail);
+    const now = new Date().toISOString();
+    const nextClient = {
+      ...existing,
+      ...client,
+      id: existing?.id || client.id || crypto.randomUUID(),
+      email: normalizedEmail,
+      role: "client",
+      isVip: Boolean(client.isVip ?? existing?.isVip),
+      active: client.active !== false,
+      createdAt: existing?.createdAt || client.createdAt || now,
+      updatedAt: now,
+    };
+    this.saveClients(existing ? clients.map((item) => (item.id === existing.id ? nextClient : item)) : [nextClient, ...clients]);
+    return nextClient;
+  },
+  deleteClient(id) {
+    this.saveClients(this.getClients().filter((client) => client.id !== id));
+  },
+  getAppointments() {
+    return store.read(APPOINTMENTS_STORAGE_KEY, []);
+  },
+  saveAppointments(appointments) {
+    store.write(APPOINTMENTS_STORAGE_KEY, appointments);
+  },
+  getVipContents() {
+    return store.read(VIP_CONTENTS_STORAGE_KEY, []);
+  },
+  saveVipContents(contents) {
+    store.write(VIP_CONTENTS_STORAGE_KEY, contents);
+  },
+  getSession() {
+    return store.read(SESSION_STORAGE_KEY, null);
+  },
+  saveSession(session) {
+    store.write(SESSION_STORAGE_KEY, session);
+  },
+  clearSession() {
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+  },
+  clearTestData() {
+    [CLIENTS_STORAGE_KEY, APPOINTMENTS_STORAGE_KEY, VIP_CONTENTS_STORAGE_KEY, SESSION_STORAGE_KEY].forEach((key) => localStorage.removeItem(key));
+  },
+};
+
 function seedData() {
-  const dataVersion = "habitar-o-corpo-v3";
   if (!localStorage.getItem("services")) store.write("services", initialServices);
-  if (!localStorage.getItem("appointments")) store.write("appointments", initialAppointments);
-  if (!localStorage.getItem("vipContents")) store.write("vipContents", initialVipContents);
-  if (!localStorage.getItem("admins")) store.write("admins", initialAdmins);
   migrateClients();
-  localStorage.setItem("dataVersion", dataVersion);
+  migrateAppointments();
+  migrateVipContents();
+  if (!localStorage.getItem("admins")) store.write("admins", initialAdmins);
   state.client = getClientSession();
 }
 
 function resetDemoData() {
   store.write("services", initialServices);
-  store.write("appointments", initialAppointments);
-  store.write("vipContents", initialVipContents);
-  saveClients(initialClients);
+  localDataStore.saveAppointments(initialAppointments);
+  localDataStore.saveVipContents(initialVipContents);
+  localDataStore.saveClients(initialClients);
   localStorage.removeItem("vipUsers");
   LEGACY_CLIENT_KEYS.forEach((key) => localStorage.removeItem(key));
   store.write("admins", initialAdmins);
+  localDataStore.clearSession();
   localStorage.removeItem("clientSession");
   state.client = null;
-  localStorage.setItem("dataVersion", "habitar-o-corpo-v3");
 }
 
 function getServices() {
@@ -290,51 +378,31 @@ function getServices() {
 }
 
 function getAppointments() {
-  return store.read("appointments", []);
+  return localDataStore.getAppointments();
 }
 
 function getVipContents() {
-  return store.read("vipContents", []);
+  return localDataStore.getVipContents();
 }
 
 function getClients() {
-  return store.read(CLIENTS_STORAGE_KEY, []);
+  return localDataStore.getClients();
 }
 
 function saveClients(clients) {
-  store.write(CLIENTS_STORAGE_KEY, clients);
+  localDataStore.saveClients(clients);
 }
 
 function findClientByEmail(email) {
-  const normalizedEmail = normalizeEmail(email);
-  return getClients().find((client) => normalizeEmail(client.email) === normalizedEmail) || null;
+  return localDataStore.findClientByEmail(email);
 }
 
 function upsertClient(client) {
-  const normalizedEmail = normalizeEmail(client.email);
-  const clients = getClients();
-  const existing = clients.find((item) => item.id === client.id || normalizeEmail(item.email) === normalizedEmail);
-  const now = new Date().toISOString();
-  const nextClient = {
-    ...existing,
-    ...client,
-    id: existing?.id || client.id || crypto.randomUUID(),
-    email: normalizedEmail,
-    role: "client",
-    isVip: Boolean(client.isVip ?? existing?.isVip),
-    active: client.active !== false,
-    createdAt: existing?.createdAt || client.createdAt || now,
-    updatedAt: now,
-  };
-  const nextClients = existing
-    ? clients.map((item) => (item.id === existing.id ? nextClient : item))
-    : [nextClient, ...clients];
-  saveClients(nextClients);
-  return nextClient;
+  return localDataStore.updateClient(client);
 }
 
 function deleteClientById(id) {
-  saveClients(getClients().filter((client) => client.id !== id));
+  localDataStore.deleteClient(id);
 }
 
 function mergeClientsByEmail(...clientGroups) {
@@ -363,6 +431,7 @@ function mergeClientsByEmail(...clientGroups) {
 }
 
 function migrateClients() {
+  const hasOfficialClients = localStorage.getItem(CLIENTS_STORAGE_KEY) !== null;
   const currentClients = store.read(CLIENTS_STORAGE_KEY, []);
   const legacyClients = LEGACY_CLIENT_KEYS.flatMap((key) => store.read(key, []));
   const legacyVipUsers = store.read("vipUsers", [])
@@ -380,10 +449,25 @@ function migrateClients() {
       createdAt: user.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }));
-  const migratedClients = mergeClientsByEmail(initialClients, legacyVipUsers, legacyClients, currentClients);
+  const seedClients = hasOfficialClients ? [] : initialClients;
+  const migratedClients = mergeClientsByEmail(seedClients, legacyVipUsers, legacyClients, currentClients);
   saveClients(migratedClients);
   LEGACY_CLIENT_KEYS.forEach((key) => localStorage.removeItem(key));
   localStorage.removeItem("vipUsers");
+}
+
+function migrateAppointments() {
+  if (localStorage.getItem(APPOINTMENTS_STORAGE_KEY) !== null) return;
+  const legacyAppointments = store.read("appointments", []);
+  localDataStore.saveAppointments(legacyAppointments.length ? legacyAppointments : initialAppointments);
+  localStorage.removeItem("appointments");
+}
+
+function migrateVipContents() {
+  if (localStorage.getItem(VIP_CONTENTS_STORAGE_KEY) !== null) return;
+  const legacyContents = store.read("vipContents", []);
+  localDataStore.saveVipContents(legacyContents.length ? legacyContents : initialVipContents);
+  localStorage.removeItem("vipContents");
 }
 
 function getAdmins() {
@@ -391,18 +475,24 @@ function getAdmins() {
 }
 
 function getClientSession() {
-  const session = store.read("clientSession", null);
+  const legacySession = store.read("clientSession", null);
+  if (legacySession && !localDataStore.getSession()) {
+    localDataStore.saveSession(legacySession);
+    localStorage.removeItem("clientSession");
+  }
+  const session = localDataStore.getSession();
   if (!session?.id) return null;
   return getClients().find((client) => client.id === session.id && client.active !== false) || null;
 }
 
 function saveClientSession(client) {
   const session = { id: client.id, email: client.email, loggedAt: new Date().toISOString() };
-  store.write("clientSession", session);
+  localDataStore.saveSession(session);
   state.client = client;
 }
 
 function clearClientSession() {
+  localDataStore.clearSession();
   localStorage.removeItem("clientSession");
   state.client = null;
 }
@@ -1108,6 +1198,7 @@ function renderAdmin() {
         <h1>Dashboard</h1>
         <div class="admin-actions">
           <button class="ghost-btn" id="resetDemo">Restaurar demo</button>
+          <button class="danger-btn" id="clearLocalData">Limpar dados locais de teste</button>
           <button class="ghost-btn" id="adminLogout">Sair</button>
         </div>
       </div>
@@ -1174,6 +1265,7 @@ function adminClients(clients) {
         <strong>Diagnóstico de clientes</strong>
         <span>Chave oficial usada: ${CLIENTS_STORAGE_KEY}</span>
         <span>Total de clientes: ${clients.length}</span>
+        <span>Sessão atual: ${localDataStore.getSession()?.email || "nenhuma"}</span>
         <small>${clients.map((client) => normalizeEmail(client.email)).filter(Boolean).join(", ") || "Nenhum e-mail carregado"}</small>
       </div>
       <p class="admin-warning">Esta é uma recuperação provisória. Em produção, use autenticação segura com backend.</p>
@@ -1383,6 +1475,11 @@ function bindEvents() {
     resetDemoData();
     render();
   });
+  document.querySelector("#clearLocalData")?.addEventListener("click", () => {
+    if (!confirm("Apagar clientes, agendamentos, conteúdos VIP e sessão locais deste navegador?")) return;
+    localDataStore.clearTestData();
+    location.reload();
+  });
 
   document.querySelectorAll("[data-status]").forEach((select) => select.addEventListener("change", updateAppointmentStatus));
   document.querySelector("#serviceForm")?.addEventListener("submit", createService);
@@ -1437,7 +1534,7 @@ function submitBooking(event) {
     status: "pending",
     createdAt: new Date().toISOString(),
   };
-  store.write("appointments", [appointment, ...appointments]);
+  localDataStore.saveAppointments([appointment, ...appointments]);
   state.bookingDraft = appointment;
   setRoute("confirmacao");
 }
@@ -1535,7 +1632,7 @@ function submitClientSignup(event) {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  const savedClient = upsertClient(client);
+  const savedClient = localDataStore.createClient(client);
   saveClientSession(savedClient);
   setRoute("minha-conta");
 }
@@ -1607,7 +1704,7 @@ function updateAppointmentStatus(event) {
   const appointments = getAppointments().map((item) =>
     item.id === event.currentTarget.dataset.status ? { ...item, status: event.currentTarget.value } : item,
   );
-  store.write("appointments", appointments);
+  localDataStore.saveAppointments(appointments);
 }
 
 function createService(event) {
@@ -1719,7 +1816,7 @@ function createAdminClient(event) {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  upsertClient(client);
+  localDataStore.createClient(client);
   form.reset();
   render();
 }
@@ -1789,7 +1886,7 @@ async function createVipContent(event) {
     access: "VIP",
   };
 
-  store.write("vipContents", [content, ...getVipContents()]);
+  localDataStore.saveVipContents([content, ...getVipContents()]);
   form.reset();
   message.textContent = "Conteúdo VIP salvo com sucesso.";
   window.setTimeout(render, 650);
@@ -1799,7 +1896,7 @@ function deleteVipContent(event) {
   const content = getVipContents().find((item) => item.id === event.currentTarget.dataset.deleteContent);
   if (!content) return;
   if (!confirm(`Excluir o conteúdo "${content.title}"?`)) return;
-  store.write("vipContents", getVipContents().filter((item) => item.id !== content.id));
+  localDataStore.saveVipContents(getVipContents().filter((item) => item.id !== content.id));
   render();
 }
 
@@ -1823,8 +1920,7 @@ function editVipContent(event) {
     return;
   }
 
-  store.write(
-    "vipContents",
+  localDataStore.saveVipContents(
     contents.map((item) =>
       item.id === contentId
         ? {
@@ -1845,8 +1941,7 @@ function editVipContent(event) {
 
 function toggleVipContent(event) {
   const contentId = event.currentTarget.dataset.toggleContent;
-  store.write(
-    "vipContents",
+  localDataStore.saveVipContents(
     getVipContents().map((content) =>
       content.id === contentId
         ? { ...content, status: content.status === "inactive" ? "active" : "inactive" }

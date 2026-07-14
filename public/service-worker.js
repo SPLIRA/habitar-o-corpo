@@ -1,16 +1,13 @@
-const CACHE_NAME = "habitar-o-corpo-pwa-v1";
+const CACHE_NAME = "attual-one-pwa-v1";
 const APP_SHELL = [
-  "./",
-  "./index.html",
-  "./styles.css",
-  "./app.js",
-  "./manifest.json",
-  "./icons/icon.svg",
-  "./icons/icon-192.png",
-  "./icons/icon-512.png",
-  "./icons/icon-512-maskable.png",
-  "./icons/favicon.png",
-  "./icons/apple-touch-icon.png",
+  "/",
+  "/manifest.json",
+  "/icons/icon.svg",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+  "/icons/icon-512-maskable.png",
+  "/icons/favicon.png",
+  "/icons/apple-touch-icon.png",
 ];
 
 self.addEventListener("install", (event) => {
@@ -29,5 +26,9 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
-  event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request)));
+  event.respondWith(
+    fetch(event.request)
+      .then((response) => response)
+      .catch(() => caches.match(event.request)),
+  );
 });

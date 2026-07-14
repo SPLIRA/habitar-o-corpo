@@ -1,14 +1,14 @@
 {
-  "name": "Habitar o Corpo",
-  "short_name": "Joelma Souza",
-  "description": "PWA de serviços, agendamento e área VIP de Joelma Souza — Terapeuta Integrativa.",
+  "name": "ATTUAL ONE",
+  "short_name": "ATTUAL ONE",
+  "description": "Aplicacao profissional ATTUAL ONE.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#1F3A33",
-  "theme_color": "#1F3A33",
+  "background_color": "#ffffff",
+  "theme_color": "#0f172a",
   "orientation": "portrait",
-  "categories": ["health", "lifestyle", "productivity"],
+  "categories": ["business", "productivity"],
   "icons": [
     {
       "src": "/icons/icon-192.png",

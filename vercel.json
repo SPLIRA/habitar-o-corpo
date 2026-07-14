@@ -1,6 +1,4 @@
 {
-  "cleanUrls": true,
-  "trailingSlash": false,
   "headers": [
     {
       "source": "/service-worker.js",
@@ -19,12 +17,6 @@
           "value": "application/manifest+json"
         }
       ]
-    }
-  ],
-  "rewrites": [
-    {
-      "source": "/:path*",
-      "destination": "/index.html"
     }
   ]
 }
